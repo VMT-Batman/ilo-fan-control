@@ -26,6 +26,7 @@ validate_target() {
 install_deps() {
     echo "-- Installing dependencies..."
     if command -v apt-get >/dev/null 2>&1; then
+        export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq
         apt-get install -y python3 python3-flask python3-requests python3-cheroot openssl
     elif command -v pip3 >/dev/null 2>&1; then
