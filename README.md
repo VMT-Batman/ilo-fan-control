@@ -14,6 +14,14 @@ a floor, watch it live, and forget about it.
 in your browser and you'll see everything: live fan speeds, hottest
 sensors, temperature trends, and current status at a glance.
 
+> **AI-assisted project.** The code, documentation, and packaging here were
+> developed with an AI coding agent (Claude) working interactively with the
+> maintainer, including live testing against real HPE hardware throughout
+> development -- it's not a blind AI-generated dump; every change was
+> reviewed, tested, and iterated on. That said, you should still read
+> through `fan_control.py` yourself, especially the thermal-guard and
+> fan-fault logic, before trusting it with hardware you care about.
+
 ## Compatibility
 
 Developed and tested against an **HPE ProLiant DL360 Gen10 running iLO 5
