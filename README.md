@@ -90,6 +90,39 @@ If you'd rather not run a script, or you're not on a systemd/apt system:
    systemctl enable --now ilo-fan-control
    ```
 
+## Persistence (surviving reboots and crashes)
+
+Both `install.sh` and step 5 above already set this up -- `systemctl
+enable --now` does two things at once: `enable` registers the service to
+start automatically on every boot (via `WantedBy=multi-user.target` in
+`ilo-fan-control.service`), and `start` runs it immediately. Combined
+with `Restart=always` in the same unit file, systemd will also relaunch
+it automatically if the process ever crashes or is killed. No extra
+script or cron job needed -- this is the standard, correct way to run a
+long-lived Linux service, and it's already wired up.
+
+To confirm it's actually set up that way on your machine:
+
+```bash
+systemctl is-enabled ilo-fan-control   # should print "enabled"
+systemctl is-active ilo-fan-control    # should print "active"
+```
+
+Other useful commands:
+
+```bash
+systemctl status ilo-fan-control       # current state + last few log lines
+journalctl -u ilo-fan-control -f       # follow live logs
+systemctl restart ilo-fan-control      # apply a manual config.json edit
+systemctl disable --now ilo-fan-control  # stop it and remove from boot
+```
+
+**One thing to avoid**: running `python3 fan_control.py` directly in a
+terminal to "just try it" works fine for testing, but it is *not*
+persistent -- closing that terminal (or the SSH session it's in) kills
+the process. Always go through `systemctl` for anything you want to
+keep running unattended.
+
 ## First login
 
 On first start, if no dashboard password is configured yet, one is
