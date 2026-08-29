@@ -279,3 +279,7 @@ in the config file.
 - **Fans not dropping after lowering the target**: the display refreshes
   within one control-loop cycle (`check_interval_seconds`, default 60s)
   or immediately if you click "Apply Now".
+
+## License
+
+[MIT](LICENSE) -- do what you like with it, no warranty.
