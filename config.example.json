@@ -1,0 +1,7 @@
+{
+    "ilo_ip": "192.168.1.50",
+    "ilo_user": "your-ilo-username",
+    "ilo_password": "your-ilo-password",
+    "target_fan_percentage": 30,
+    "dashboard_tls": true
+}

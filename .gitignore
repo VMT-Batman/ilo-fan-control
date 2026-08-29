@@ -1,0 +1,6 @@
+config.json
+history.json
+tls/
+__pycache__/
+*.pyc
+*.tmp
