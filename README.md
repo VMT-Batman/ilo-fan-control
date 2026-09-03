@@ -190,8 +190,13 @@ those are safety systems, not manual controls.
 ### Quiet Hours
 
 An optional lower target during a configured time window (e.g. overnight),
-reverting automatically outside it. Independent of Away Mode -- useful
-even if you never lock manual controls at all.
+reverting automatically outside it. Useful even if you never lock manual
+controls at all. By default it's independent of Away Mode -- Away Mode's
+own curve/thermostat takes over entirely while locked, quiet hours aside.
+Check "Also cap Away Mode's fan speed during quiet hours" if you want the
+opposite: quiet hours acts as a noise ceiling on top of Away Mode too,
+capping (never raising) whatever it would otherwise compute during the
+window.
 
 ### Alerts
 
@@ -241,6 +246,7 @@ first-time setup.
 | `quiet_hours_enabled` | `false` | Enable the overnight schedule |
 | `quiet_hours_start` / `quiet_hours_end` | `22:00` / `07:00` | 24h local time window |
 | `quiet_hours_target_fan_percentage` | *(falls back to `target_fan_percentage`)* | Target during the window |
+| `quiet_hours_overrides_away_mode` | `false` | If `true`, quiet hours also caps Away Mode's curve/thermostat floor during the window (never raises it, only lowers) |
 | `alert_webhook_url` | *(unset = disabled)* | ntfy/Discord/generic endpoint |
 | `alert_webhook_format` | `ntfy` | `ntfy`, `discord`, or `generic` |
 

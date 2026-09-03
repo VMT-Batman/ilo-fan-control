@@ -775,6 +775,19 @@ def run_cycle(ilo):
             else:
                 baseline_desc = "Away Mode curve {}% (CPU {}C, {}-{}%)".format(
                     baseline, "?" if cpu_max is None else "{:.0f}".format(cpu_max), away_min, away_max)
+
+        # Away Mode normally overrides quiet hours entirely (its own
+        # curve/thermostat floor takes over). If quiet_hours_overrides_away_mode
+        # is set, treat the quiet-hours target as a ceiling instead: never
+        # force MORE airflow than that during the quiet window, even while
+        # Away Mode is locked. It can still go quieter than that if Away
+        # Mode's own strategy already wants less. Thermal guard/fan-fault
+        # protection (applied further below) are unaffected either way.
+        if quiet_active and bool(cfg.get("quiet_hours_overrides_away_mode")) and baseline > target:
+            log.info("Quiet hours active; capping %s at %d%% (was %d%%)",
+                     baseline_desc, target, baseline)
+            baseline_desc = "{} capped to {}% by quiet hours".format(baseline_desc, target)
+            baseline = target
     else:
         baseline = target
         baseline_desc = "configured target {}%".format(target)
@@ -1395,6 +1408,11 @@ SETTINGS_TEMPLATE = """
         {% endif %}
         Either way this is proactive cooling instead of a flat number, so the guard's reactive
         100% is rarely needed. Set min=max for a flat floor, or max to 0 for fully hands-off to iLO.
+        {% if config.quiet_hours_enabled and config.quiet_hours_overrides_away_mode %}
+        Quiet hours is set to cap this during its window (see below).
+        {% elif config.quiet_hours_enabled %}
+        Quiet hours is enabled but won't affect this unless you check "cap Away Mode" below.
+        {% endif %}
         {% else %}
         Unlocked. Manual controls are available and your configured target (with quiet hours,
         if enabled) is being enforced as normal.
@@ -1430,7 +1448,9 @@ SETTINGS_TEMPLATE = """
     <h3>Quiet Hours</h3>
     <p class="stat-sub">Swap in a lower fan target during a time window (e.g. overnight),
         reverting automatically outside it. Thermal guard and fan-fault overrides always
-        take priority over this.</p>
+        take priority over this. By default Away Mode overrides quiet hours entirely (its
+        own curve/thermostat takes over) -- check the box below to have quiet hours act as
+        a noise ceiling on Away Mode too, instead of being ignored while it's locked.</p>
     <form method="POST" action="/settings/quiet-hours">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label><input type="checkbox" name="quiet_enabled" {{ 'checked' if config.quiet_hours_enabled }}> Enabled</label><br>
@@ -1441,6 +1461,9 @@ SETTINGS_TEMPLATE = """
         <label>Target ({{ min_pct }}-{{ max_pct }}%)</label>
         <input type="number" name="quiet_target" min="{{ min_pct }}" max="{{ max_pct }}"
                value="{{ config.quiet_hours_target_fan_percentage or config.target_fan_percentage }}"><br>
+        <label><input type="checkbox" name="quiet_overrides_away"
+               {{ 'checked' if config.quiet_hours_overrides_away_mode }}>
+               Also cap Away Mode's fan speed during quiet hours</label><br>
         <button type="submit">Save Quiet Hours</button>
     </form>
 </div>
@@ -1581,9 +1604,11 @@ def build_dashboard_context(cfg, status, hist, activity=None):
     guard_class = "c-danger" if status.get("guard_active") else "c-ok"
     fan_fault_ids = set(status.get("fan_fault_ids") or [])
     # Quiet hours only actually influences enforcement when Away Mode isn't
-    # locked (the away curve/thermostat overrides it entirely) -- suppress
-    # the badge in that case so it doesn't imply something that isn't happening.
-    quiet_active = bool(status.get("quiet_hours_active")) and not bool(cfg.get("manual_controls_locked"))
+    # locked, unless quiet_hours_overrides_away_mode is set (making it a
+    # ceiling on Away Mode's own floor too) -- suppress the badge otherwise
+    # so it doesn't imply something that isn't happening.
+    quiet_active = bool(status.get("quiet_hours_active")) and (
+        not bool(cfg.get("manual_controls_locked")) or bool(cfg.get("quiet_hours_overrides_away_mode")))
 
     threshold_f = c_to_f(threshold)
     cpu_max_f = c_to_f(cpu_max) if cpu_max is not None else None
@@ -1880,6 +1905,7 @@ def settings_quiet_hours():
         abort(429, description="Too many requests")
 
     enabled = request.form.get("quiet_enabled") == "on"
+    overrides_away = request.form.get("quiet_overrides_away") == "on"
     start = request.form.get("quiet_start", "").strip()
     end = request.form.get("quiet_end", "").strip()
 
@@ -1909,9 +1935,11 @@ def settings_quiet_hours():
         cfg["quiet_hours_start"] = start
         cfg["quiet_hours_end"] = end
         cfg["quiet_hours_target_fan_percentage"] = target
+        cfg["quiet_hours_overrides_away_mode"] = overrides_away
         save_config(cfg)
-    log_activity("Quiet hours {} ({}-{}, target {}%) by {}".format(
-        "enabled" if enabled else "updated (disabled)", start, end, target, ip))
+    log_activity("Quiet hours {} ({}-{}, target {}%, {} Away Mode) by {}".format(
+        "enabled" if enabled else "updated (disabled)", start, end, target,
+        "capping" if overrides_away else "not capping", ip))
     force_event.set()
     return redirect("/settings?saved=1")
 
