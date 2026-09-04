@@ -1485,17 +1485,8 @@ SETTINGS_TEMPLATE = """
     <div class="card-title">Away Mode</div>
     <p class="stat-sub">
         {% if config.manual_controls_locked %}
-        &#128274; Locked. Update / Apply Now are disabled, and automatic control is enforced
-        instead, clamped to {{ away_min }}-{{ away_max }}%:
-        {% if away_control_mode == 'thermostat' %}
-        <b>Thermostat</b> &mdash; proportional control that continuously nudges fan speed to hold
-        CPU near {{ ideal_f }}&deg;F, adapting as load changes instead of following a fixed formula.
-        {% else %}
-        <b>Curve</b> &mdash; {{ away_min }}% when CPU is cool (&le;{{ cool_f }}&deg;F), ramping up to
-        {{ away_max }}% as it approaches {{ hot_f }}&deg;F (5&deg;C below your guard threshold).
-        {% endif %}
-        Either way this is proactive cooling instead of a flat number, so the guard's reactive
-        100% is rarely needed. Set min=max for a flat floor, or max to 0 for fully hands-off to iLO.
+        &#128274; Locked &mdash; Update / Apply Now are disabled, and the strategy below is enforced
+        instead, clamped to {{ away_min }}-{{ away_max }}%.
         {% if config.quiet_hours_enabled and config.quiet_hours_overrides_away_mode %}
         Quiet hours is set to cap this during its window (see below).
         {% elif config.quiet_hours_enabled %}
@@ -1512,23 +1503,35 @@ SETTINGS_TEMPLATE = """
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="field">
             <label for="away-mode">Strategy</label>
-            <select id="away-mode" name="away_control_mode">
+            <select id="away-mode" name="away_control_mode" onchange="iloAwayModeChanged(this.value)">
                 <option value="curve" {{ 'selected' if away_control_mode != 'thermostat' }}>Curve</option>
                 <option value="thermostat" {{ 'selected' if away_control_mode == 'thermostat' }}>Thermostat</option>
             </select>
         </div>
+        <div id="away-desc-curve" class="callout callout-info" {{ 'hidden' if away_control_mode == 'thermostat' }}>
+            <b>Curve</b> follows a fixed formula: {{ away_min }}% while CPU is cool (&le;{{ cool_f }}&deg;F),
+            ramping up to {{ away_max }}% by the time it's within 5&deg;C of your guard threshold
+            ({{ hot_f }}&deg;F). Simple and predictable &mdash; it doesn't measure whether that speed is
+            actually keeping up, it just follows the ramp.
+        </div>
+        <div id="away-desc-thermostat" class="callout callout-info" {{ '' if away_control_mode == 'thermostat' else 'hidden' }}>
+            <b>Thermostat</b> targets one temperature you choose and corrects toward it every cycle:
+            speeds up if you're running hot, eases off once you're comfortably at target, clamped to
+            {{ away_min }}-{{ away_max }}%. More responsive to real conditions than a fixed formula,
+            since it reacts to how the previous cycle's speed actually performed.
+        </div>
         <div class="field-row">
             <div class="field">
-                <label for="away-min">Min % <span class="hint">(when cool / thermostat floor)</span></label>
+                <label for="away-min">Min % <span class="hint">(floor)</span></label>
                 <input id="away-min" type="number" name="away_min" min="0" max="{{ max_pct }}" value="{{ away_min }}">
             </div>
             <div class="field">
-                <label for="away-max">Max % <span class="hint">(near guard threshold / thermostat ceiling)</span></label>
+                <label for="away-max">Max % <span class="hint">(ceiling)</span></label>
                 <input id="away-max" type="number" name="away_max" min="0" max="{{ max_pct }}" value="{{ away_max }}">
             </div>
         </div>
-        <div class="field">
-            <label for="away-ideal">Ideal temperature <span class="hint">(&deg;F, thermostat only)</span></label>
+        <div class="field" id="away-ideal-field" {{ '' if away_control_mode == 'thermostat' else 'hidden' }}>
+            <label for="away-ideal">Ideal temperature <span class="hint">(&deg;F)</span></label>
             <input id="away-ideal" type="number" name="away_ideal_f" min="60" max="200" value="{{ ideal_f }}">
         </div>
         <button type="submit">Save Away Settings</button>
@@ -1541,6 +1544,15 @@ SETTINGS_TEMPLATE = """
         </button>
     </form>
 </div>
+
+<script>
+function iloAwayModeChanged(mode) {
+    var isThermostat = (mode === 'thermostat');
+    document.getElementById('away-ideal-field').hidden = !isThermostat;
+    document.getElementById('away-desc-curve').hidden = isThermostat;
+    document.getElementById('away-desc-thermostat').hidden = !isThermostat;
+}
+</script>
 
 <div class="card">
     <div class="card-eyebrow">Schedule</div>
