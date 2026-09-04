@@ -98,9 +98,50 @@ If you'd rather not run a script, or you're not on a systemd/apt system:
    systemctl enable --now ilo-fan-control
    ```
 
+## Docker
+
+If you'd rather not touch systemd/apt on the host at all:
+
+```bash
+git clone <this-repo-url>
+cd ilo-fan-control
+mkdir -p data
+cp config.example.json data/config.json
+# edit data/config.json: at least ilo_ip, ilo_user, ilo_password
+docker compose up -d --build
+```
+
+`data/` (bind-mounted to `/srv/ilo-fan-control` inside the container) is
+where `config.json`, `history.json`, and the self-signed `tls/` cert live
+-- it persists across rebuilds/restarts/upgrades. The dashboard comes up
+on `https://<host>:5000`, same as any other install method.
+
+Without Compose:
+
+```bash
+docker build -t ilo-fan-control .
+docker run -d --name ilo-fan-control --restart unless-stopped \
+    -p 5000:5000 -v "$(pwd)/data:/srv/ilo-fan-control" ilo-fan-control
+```
+
+The [CLI commands](#cli-reference) all work the same way, run one-off
+against the same data volume:
+
+```bash
+docker compose run --rm ilo-fan-control check
+docker compose exec ilo-fan-control python3 fan_control.py set-password
+```
+
+`restart: unless-stopped` (or `--restart unless-stopped`) is Docker's
+equivalent of systemd's `Restart=always` + boot-start -- the container
+restarts on crash and comes back after a host reboot as long as the
+Docker daemon itself starts on boot (true by default on most installs).
+
 ## Persistence (surviving reboots and crashes)
 
-Both `install.sh` and step 5 above already set this up -- `systemctl
+Both `install.sh` and step 5 above already set this up (see
+[Docker](#docker) above instead if that's how you're running it) --
+`systemctl
 enable --now` does two things at once: `enable` registers the service to
 start automatically on every boot (via `WantedBy=multi-user.target` in
 `ilo-fan-control.service`), and `start` runs it immediately. Combined

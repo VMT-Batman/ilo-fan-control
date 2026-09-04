@@ -1,6 +1,7 @@
 config.json
 history.json
 tls/
+data/
 __pycache__/
 *.pyc
 *.tmp

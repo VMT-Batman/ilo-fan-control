@@ -1,0 +1,9 @@
+services:
+  ilo-fan-control:
+    build: .
+    container_name: ilo-fan-control
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/srv/ilo-fan-control

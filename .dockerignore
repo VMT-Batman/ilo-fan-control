@@ -1,0 +1,12 @@
+.git
+data/
+config.json
+history.json
+tls/
+__pycache__/
+*.pyc
+*.tmp
+README.md
+LICENSE
+install.sh
+ilo-fan-control.service
