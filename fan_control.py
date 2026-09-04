@@ -35,6 +35,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -103,11 +104,24 @@ _rate_lock = threading.Lock()
 _rate_buckets = {}
 
 
+def _strip_json_comments(text):
+    """Minimal JSONC support so config.example.json's documented, commented-
+    out optional keys can be copied straight to config.json and loaded as-is.
+    Strips only full-line // comments (a line whose first non-whitespace
+    characters are //) -- never inline/trailing ones, since a legitimate
+    value (an iLO URL, a webhook URL) can itself contain "//". Also
+    tolerates a trailing comma before a closing } or ], so every example
+    key -- including the last active one -- can end in a comma regardless
+    of which lines above/below it are commented out."""
+    lines = [ln for ln in text.splitlines() if not ln.strip().startswith("//")]
+    return re.sub(r",(\s*[}\]])", r"\1", "\n".join(lines))
+
+
 def load_config():
     global _last_good_config
     try:
         with open(CONFIG_FILE, "r") as f:
-            cfg = json.load(f)
+            cfg = json.loads(_strip_json_comments(f.read()))
         _last_good_config = cfg
         return dict(cfg)
     except (OSError, ValueError) as e:
@@ -1087,6 +1101,34 @@ BASE_STYLE = """
     .footer { max-width: 1800px; margin: 12px auto 0; color: var(--text-dim); font-size: 11px; text-align: center; }
     .warn { color: var(--warn); font-weight: bold; }
     .error { color: var(--danger); }
+
+    /* --- Credentials / Settings: page header + labeled-field layout --- */
+    .page-header { max-width: 1800px; margin: 0 auto 14px; }
+    .page-header h1 { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #fff; letter-spacing: -0.01em; }
+    .page-header p { margin: 0; font-size: 12.5px; color: var(--text-dim); max-width: 640px; line-height: 1.5; }
+
+    .card-eyebrow {
+        font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--accent); margin-bottom: 4px;
+    }
+    .card-title { font-size: 15px; font-weight: 700; color: #fff; margin: 0 0 10px; }
+
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 4px; }
+    .field input:not([type=checkbox]), .field select { width: 100%; }
+    p.hint { display: block; font-size: 11px; color: var(--text-dim); font-weight: 400; margin: -4px 0 12px; }
+    label .hint { font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: normal; }
+    .field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .field-row .field { flex: 1; min-width: 150px; }
+
+    .current-value {
+        font-size: 12px; color: var(--text-dim); background: rgba(255,255,255,0.03);
+        border: 1px solid var(--card-border); border-radius: 6px; padding: 8px 10px; margin-bottom: 14px;
+    }
+    .current-value b { color: #fff; font-weight: 600; }
+
+    .callout { font-size: 11.5px; line-height: 1.5; border-radius: 6px; padding: 8px 10px; margin: 0 0 12px; }
+    .callout-info { background: rgba(59,158,255,0.08); color: var(--text); border: 1px solid rgba(59,158,255,0.25); }
 """
 
 STAT_ROW_TEMPLATE = """
@@ -1336,31 +1378,70 @@ CREDS_TEMPLATE = """
     <span class="brand">iLO Fan Control</span>
     <nav><a href="/">Status</a><a href="/credentials" class="active">Credentials</a><a href="/settings">Settings</a></nav>
 </div>
+
+<div class="page-header">
+    <h1>Credentials</h1>
+    <p>Manage who can sign in to this dashboard, and the account it uses to authenticate against the iLO device itself.</p>
+</div>
+
 {% if request.args.get('dash') == 'ok' %}<div class="toast ok">Dashboard credentials updated.</div>{% endif %}
 {% if request.args.get('ilo') == 'ok' %}<div class="toast ok">iLO credentials updated (verified by test login).</div>{% endif %}
 {% if request.args.get('err') %}<div class="toast error">{{ request.args.get('err') }}</div>{% endif %}
 
 <div class="grid">
 <div class="card">
-    <h3>Dashboard Login</h3>
+    <div class="card-eyebrow">Access Control</div>
+    <div class="card-title">Dashboard Login</div>
+    <div class="current-value">Current username: <b>{{ config.dashboard_user or 'admin' }}</b></div>
     <form method="POST" action="/credentials/dashboard">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="password" name="current_password" placeholder="Current password" required><br>
-        <input type="text" name="new_username" placeholder="Username (blank = keep)" value=""><br>
-        <input type="password" name="new_password" placeholder="New password (min {{ min_len }})" required><br>
-        <input type="password" name="confirm_password" placeholder="Confirm new password" required><br>
+        <div class="field">
+            <label for="cur-pw">Current password</label>
+            <input id="cur-pw" type="password" name="current_password" required>
+        </div>
+        <div class="field">
+            <label for="new-user">New username <span class="hint">(optional &mdash; leave blank to keep it)</span></label>
+            <input id="new-user" type="text" name="new_username" autocomplete="off">
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label for="new-pw">New password <span class="hint">(optional)</span></label>
+                <input id="new-pw" type="password" name="new_password">
+            </div>
+            <div class="field">
+                <label for="confirm-pw">Confirm new password</label>
+                <input id="confirm-pw" type="password" name="confirm_password">
+            </div>
+        </div>
+        <p class="hint">Leave both password fields blank to rename the account without changing its password. New password must be at least {{ min_len }} characters.</p>
         <button type="submit">Update Dashboard Login</button>
     </form>
 </div>
 <div class="card">
-    <h3>iLO Credentials</h3>
-    <p class="warn">Applied to iLO, verified by fresh login; auto-reverts on failure.</p>
+    <div class="card-eyebrow">Device Account</div>
+    <div class="card-title">iLO Credentials</div>
+    <div class="current-value">Current iLO username: <b>{{ config.ilo_user }}</b></div>
+    <div class="callout callout-info">Applied directly to the iLO device via Redfish and verified with a fresh login before it's kept &mdash; if verification fails, the change is automatically reverted, so this can't lock you out of iLO.</div>
     <form method="POST" action="/credentials/ilo">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="password" name="current_ilo_password" placeholder="Current iLO password" required><br>
-        <input type="text" name="new_username" placeholder="iLO username (blank = keep)" value=""><br>
-        <input type="password" name="new_ilo_password" placeholder="New iLO password (min {{ min_len }})" required><br>
-        <input type="password" name="confirm_password" placeholder="Confirm new password" required><br>
+        <div class="field">
+            <label for="cur-ilo-pw">Current iLO password</label>
+            <input id="cur-ilo-pw" type="password" name="current_ilo_password" required>
+        </div>
+        <div class="field">
+            <label for="new-ilo-user">New iLO username <span class="hint">(optional &mdash; leave blank to keep it)</span></label>
+            <input id="new-ilo-user" type="text" name="new_username" autocomplete="off">
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label for="new-ilo-pw">New iLO password <span class="hint">(min {{ min_len }})</span></label>
+                <input id="new-ilo-pw" type="password" name="new_ilo_password" required>
+            </div>
+            <div class="field">
+                <label for="confirm-ilo-pw">Confirm new password</label>
+                <input id="confirm-ilo-pw" type="password" name="confirm_password" required>
+            </div>
+        </div>
         <button type="submit" class="danger">Update iLO Credentials</button>
     </form>
 </div>
@@ -1388,13 +1469,20 @@ SETTINGS_TEMPLATE = """
     <span class="brand">iLO Fan Control</span>
     <nav><a href="/">Status</a><a href="/credentials">Credentials</a><a href="/settings" class="active">Settings</a></nav>
 </div>
+
+<div class="page-header">
+    <h1>Settings</h1>
+    <p>Configure automatic behavior &mdash; Away Mode, Quiet Hours, and alerting &mdash; without touching config.json.</p>
+</div>
+
 {% if request.args.get('saved') %}<div class="toast ok">Settings saved &mdash; applying now.</div>{% endif %}
 {% if request.args.get('tested') %}<div class="toast ok">Test alert sent &mdash; check your webhook target.</div>{% endif %}
 {% if request.args.get('err') %}<div class="toast error">{{ request.args.get('err') }}</div>{% endif %}
 
 <div class="grid">
 <div class="card">
-    <h3>Away Mode</h3>
+    <div class="card-eyebrow">Automatic Control</div>
+    <div class="card-title">Away Mode</div>
     <p class="stat-sub">
         {% if config.manual_controls_locked %}
         &#128274; Locked. Update / Apply Now are disabled, and automatic control is enforced
@@ -1422,17 +1510,27 @@ SETTINGS_TEMPLATE = """
     </p>
     <form method="POST" action="/settings/away-mode">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label>Strategy</label>
-        <select name="away_control_mode">
-            <option value="curve" {{ 'selected' if away_control_mode != 'thermostat' }}>Curve</option>
-            <option value="thermostat" {{ 'selected' if away_control_mode == 'thermostat' }}>Thermostat</option>
-        </select><br>
-        <label>Min % (when cool / thermostat floor)</label>
-        <input type="number" name="away_min" min="0" max="{{ max_pct }}" value="{{ away_min }}">
-        <label>Max % (near guard threshold / thermostat ceiling)</label>
-        <input type="number" name="away_max" min="0" max="{{ max_pct }}" value="{{ away_max }}"><br>
-        <label>Ideal temperature (&deg;F, thermostat only)</label>
-        <input type="number" name="away_ideal_f" min="60" max="200" value="{{ ideal_f }}">
+        <div class="field">
+            <label for="away-mode">Strategy</label>
+            <select id="away-mode" name="away_control_mode">
+                <option value="curve" {{ 'selected' if away_control_mode != 'thermostat' }}>Curve</option>
+                <option value="thermostat" {{ 'selected' if away_control_mode == 'thermostat' }}>Thermostat</option>
+            </select>
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label for="away-min">Min % <span class="hint">(when cool / thermostat floor)</span></label>
+                <input id="away-min" type="number" name="away_min" min="0" max="{{ max_pct }}" value="{{ away_min }}">
+            </div>
+            <div class="field">
+                <label for="away-max">Max % <span class="hint">(near guard threshold / thermostat ceiling)</span></label>
+                <input id="away-max" type="number" name="away_max" min="0" max="{{ max_pct }}" value="{{ away_max }}">
+            </div>
+        </div>
+        <div class="field">
+            <label for="away-ideal">Ideal temperature <span class="hint">(&deg;F, thermostat only)</span></label>
+            <input id="away-ideal" type="number" name="away_ideal_f" min="60" max="200" value="{{ ideal_f }}">
+        </div>
         <button type="submit">Save Away Settings</button>
     </form>
     <form method="POST" action="/lock">
@@ -1445,7 +1543,8 @@ SETTINGS_TEMPLATE = """
 </div>
 
 <div class="card">
-    <h3>Quiet Hours</h3>
+    <div class="card-eyebrow">Schedule</div>
+    <div class="card-title">Quiet Hours</div>
     <p class="stat-sub">Swap in a lower fan target during a time window (e.g. overnight),
         reverting automatically outside it. Thermal guard and fan-fault overrides always
         take priority over this. By default Away Mode overrides quiet hours entirely (its
@@ -1453,35 +1552,54 @@ SETTINGS_TEMPLATE = """
         a noise ceiling on Away Mode too, instead of being ignored while it's locked.</p>
     <form method="POST" action="/settings/quiet-hours">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label><input type="checkbox" name="quiet_enabled" {{ 'checked' if config.quiet_hours_enabled }}> Enabled</label><br>
-        <label>Start</label>
-        <input type="time" name="quiet_start" value="{{ config.quiet_hours_start or '22:00' }}"><br>
-        <label>End</label>
-        <input type="time" name="quiet_end" value="{{ config.quiet_hours_end or '07:00' }}"><br>
-        <label>Target ({{ min_pct }}-{{ max_pct }}%)</label>
-        <input type="number" name="quiet_target" min="{{ min_pct }}" max="{{ max_pct }}"
-               value="{{ config.quiet_hours_target_fan_percentage or config.target_fan_percentage }}"><br>
-        <label><input type="checkbox" name="quiet_overrides_away"
-               {{ 'checked' if config.quiet_hours_overrides_away_mode }}>
-               Also cap Away Mode's fan speed during quiet hours</label><br>
+        <div class="field">
+            <label><input type="checkbox" name="quiet_enabled" {{ 'checked' if config.quiet_hours_enabled }}> Enabled</label>
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label for="quiet-start">Start</label>
+                <input id="quiet-start" type="time" name="quiet_start" value="{{ config.quiet_hours_start or '22:00' }}">
+            </div>
+            <div class="field">
+                <label for="quiet-end">End</label>
+                <input id="quiet-end" type="time" name="quiet_end" value="{{ config.quiet_hours_end or '07:00' }}">
+            </div>
+        </div>
+        <div class="field">
+            <label for="quiet-target">Target <span class="hint">({{ min_pct }}-{{ max_pct }}%)</span></label>
+            <input id="quiet-target" type="number" name="quiet_target" min="{{ min_pct }}" max="{{ max_pct }}"
+                   value="{{ config.quiet_hours_target_fan_percentage or config.target_fan_percentage }}">
+        </div>
+        <div class="field">
+            <label><input type="checkbox" name="quiet_overrides_away"
+                   {{ 'checked' if config.quiet_hours_overrides_away_mode }}>
+                   Also cap Away Mode's fan speed during quiet hours</label>
+        </div>
         <button type="submit">Save Quiet Hours</button>
     </form>
 </div>
 
 <div class="card">
-    <h3>Alert Webhook</h3>
+    <div class="card-eyebrow">Notifications</div>
+    <div class="card-title">Alert Webhook</div>
     <p class="stat-sub">Get notified when the thermal guard fires/releases, a fan fault is
         detected/clears, or the control loop fails repeatedly (and again when it recovers).
         Works with ntfy.sh, Discord, or a generic JSON endpoint.</p>
     <form method="POST" action="/settings/alerts">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="text" name="webhook_url" placeholder="https://ntfy.sh/your-topic"
-               value="{{ config.alert_webhook_url or '' }}" style="width:100%; max-width:420px;"><br>
-        <select name="webhook_format">
-            <option value="ntfy" {{ 'selected' if (config.alert_webhook_format or 'ntfy') == 'ntfy' }}>ntfy.sh</option>
-            <option value="discord" {{ 'selected' if config.alert_webhook_format == 'discord' }}>Discord</option>
-            <option value="generic" {{ 'selected' if config.alert_webhook_format == 'generic' }}>Generic JSON</option>
-        </select>
+        <div class="field">
+            <label for="webhook-url">Webhook URL</label>
+            <input id="webhook-url" type="text" name="webhook_url" placeholder="https://ntfy.sh/your-topic"
+                   value="{{ config.alert_webhook_url or '' }}">
+        </div>
+        <div class="field">
+            <label for="webhook-format">Format</label>
+            <select id="webhook-format" name="webhook_format">
+                <option value="ntfy" {{ 'selected' if (config.alert_webhook_format or 'ntfy') == 'ntfy' }}>ntfy.sh</option>
+                <option value="discord" {{ 'selected' if config.alert_webhook_format == 'discord' }}>Discord</option>
+                <option value="generic" {{ 'selected' if config.alert_webhook_format == 'generic' }}>Generic JSON</option>
+            </select>
+        </div>
         <button type="submit">Save Webhook</button>
     </form>
     <form method="POST" action="/settings/test-alert" style="margin-top:8px;">
@@ -1752,7 +1870,7 @@ def credentials_page():
     ilo_url = "https://{}/".format(cfg.get("ilo_ip", ""))
     token = get_csrf_token()
     resp = make_response(render_template_string(
-        CREDS_TEMPLATE, style=BASE_STYLE, min_len=MIN_SECRET_LEN, csrf_token=token, ilo_url=ilo_url,
+        CREDS_TEMPLATE, config=cfg, style=BASE_STYLE, min_len=MIN_SECRET_LEN, csrf_token=token, ilo_url=ilo_url,
     ))
     return with_csrf_cookie(resp, token)
 
@@ -1773,21 +1891,28 @@ def credentials_dashboard():
     if not check_auth(auth.username, current_pw):
         log.warning("Dashboard credential change rejected (bad current password) from %s", ip)
         return redirect("/credentials?err=Current%20password%20incorrect")
-    if len(new_pw) < MIN_SECRET_LEN:
-        return redirect("/credentials?err=New%20password%20too%20short")
-    if new_pw != confirm:
-        return redirect("/credentials?err=Passwords%20do%20not%20match")
+    if new_pw:
+        if len(new_pw) < MIN_SECRET_LEN:
+            return redirect("/credentials?err=New%20password%20too%20short")
+        if new_pw != confirm:
+            return redirect("/credentials?err=Passwords%20do%20not%20match")
 
     with config_lock:
         cfg = load_config()
-        username = new_user or cfg.get("dashboard_user", "admin")
-        salt_hex = secrets.token_hex(16)
+        current_username = cfg.get("dashboard_user", "admin")
+        username_changing = bool(new_user) and new_user != current_username
+        if not username_changing and not new_pw:
+            return redirect("/credentials?err=Nothing%20to%20update")
+        username = new_user or current_username
         cfg["dashboard_user"] = username
-        cfg["dashboard_salt"] = salt_hex
-        cfg["dashboard_password_hash"] = hash_password(new_pw, salt_hex)
+        if new_pw:
+            salt_hex = secrets.token_hex(16)
+            cfg["dashboard_salt"] = salt_hex
+            cfg["dashboard_password_hash"] = hash_password(new_pw, salt_hex)
         save_config(cfg)
-    log.info("Dashboard credentials changed by %s (user=%s)", ip, username)
-    log_activity("Dashboard login credentials changed by {}".format(ip))
+    what = "username and password" if (username_changing and new_pw) else ("password" if new_pw else "username")
+    log.info("Dashboard %s changed by %s (user=%s)", what, ip, username)
+    log_activity("Dashboard login {} changed by {}".format(what, ip))
     return redirect("/credentials?dash=ok")
 
 

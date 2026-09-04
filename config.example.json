@@ -1,7 +1,56 @@
+// iLO Fan Control -- example configuration.
+//
+// Copy this file to config.json (install.sh does this for you) and fill in
+// the required values below. Lines starting with // are comments -- both
+// fan_control.py and install.sh strip them before parsing, so it's safe to
+// leave them in config.json permanently. Every optional section below is
+// commented out by default (i.e. inactive, falling back to the built-in
+// default noted in each comment) -- uncomment a line (delete its leading
+// //) and edit the value to turn it on.
 {
+    // --- Required ---
     "ilo_ip": "192.168.1.50",
     "ilo_user": "your-ilo-username",
     "ilo_password": "your-ilo-password",
     "target_fan_percentage": 30,
-    "dashboard_tls": true
+
+    // --- Dashboard ---
+    "dashboard_tls": true,
+    // "dashboard_host": "0.0.0.0",
+    // "dashboard_port": 5000,
+    // "dashboard_user": "admin",
+
+    // --- iLO connection tuning ---
+    // "chassis_id": 1,
+    // "check_interval_seconds": 60,
+    // "request_timeout_seconds": 15,
+
+    // --- Thermal guard: forces fans to 100% if CPU gets dangerously hot,
+    // regardless of any other setting below. ---
+    // "thermal_guard_enabled": true,
+    // "thermal_guard_threshold_celsius": 85,
+    // "thermal_guard_hysteresis_celsius": 5,
+    // "thermal_guard_confirm_seconds": 8,
+
+    // --- Away Mode: automatic curve/thermostat control that takes over
+    // when manual controls are locked (from the dashboard, or by setting
+    // manual_controls_locked here). See the README for Curve vs Thermostat. ---
+    // "manual_controls_locked": false,
+    // "away_control_mode": "curve",
+    // "away_min_fan_percentage": 25,
+    // "away_max_fan_percentage": 65,
+    // "away_ideal_temp_celsius": 55,
+
+    // --- Quiet Hours: a lower fan target during a scheduled overnight
+    // window, reverting automatically outside it. ---
+    // "quiet_hours_enabled": false,
+    // "quiet_hours_start": "22:00",
+    // "quiet_hours_end": "07:00",
+    // "quiet_hours_target_fan_percentage": 20,
+    // "quiet_hours_overrides_away_mode": false,
+
+    // --- Alerts: ntfy.sh, Discord, or a generic JSON webhook, notified on
+    // thermal guard / fan fault / control-loop-failure events. ---
+    // "alert_webhook_url": "https://ntfy.sh/your-topic-here",
+    // "alert_webhook_format": "ntfy"
 }

@@ -74,10 +74,19 @@ write_config() {
         "$ILO_IP" "$ILO_USER" "$ILO_PASS" "$TARGET" <<'PYEOF'
 import json
 import os
+import re
 import sys
 
 example_path, out_path, ilo_ip, ilo_user, ilo_pass, target = sys.argv[1:7]
-cfg = json.load(open(example_path))
+
+# config.example.json documents its optional keys as commented-out lines
+# (// ...) with trailing commas throughout -- strip full-line comments and
+# tolerate the resulting trailing comma before parsing. Kept in sync with
+# fan_control.py's own _strip_json_comments().
+text = open(example_path).read()
+text = "\n".join(ln for ln in text.splitlines() if not ln.strip().startswith("//"))
+text = re.sub(r",(\s*[}\]])", r"\1", text)
+cfg = json.loads(text)
 cfg["ilo_ip"] = ilo_ip
 cfg["ilo_user"] = ilo_user
 cfg["ilo_password"] = ilo_pass

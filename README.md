@@ -84,9 +84,13 @@ If you'd rather not run a script, or you're not on a systemd/apt system:
 
 1. Copy `fan_control.py` somewhere permanent, e.g. `/srv/ilo-fan-control/`.
 2. Copy `config.example.json` to `config.json` next to it, and fill in
-   at least `ilo_ip`, `ilo_user`, `ilo_password`. Everything else has a
-   sensible default (see the [configuration reference](#configuration-reference)).
-   `chmod 600 config.json` -- it holds your iLO password in plaintext.
+   at least `ilo_ip`, `ilo_user`, `ilo_password`. Everything else is an
+   optional key documented as a commented-out `// "key": value,` line --
+   uncomment (delete the leading `//`) and edit any you want to turn on;
+   the rest fall back to the defaults noted in each comment (see also the
+   [configuration reference](#configuration-reference)). It's fine to leave
+   the comments in `config.json` permanently -- they're stripped before
+   parsing. `chmod 600 config.json` -- it holds your iLO password in plaintext.
 3. Install the Python dependencies: `flask`, `requests`, and optionally
    `cheroot` (falls back to Flask's dev server with a warning if missing).
 4. Run it directly to test: `python3 fan_control.py`
@@ -201,10 +205,12 @@ click through it (Advanced -> Proceed).
   speeds per-slot, hottest sensors, thermal-guard/fan-fault state, and a
   recent-activity log. Updates automatically every few seconds without
   reloading the page.
-- **Credentials** -- change the dashboard login, or rotate the iLO
-  account's own password (applied via Redfish, verified with a fresh
-  login, and automatically reverted if verification fails -- you can't
-  accidentally lock yourself out of iLO from here).
+- **Credentials** -- change the dashboard login's username and/or password
+  independently (rename the account without being forced to rotate its
+  password, or vice versa), or rotate the iLO account's own password
+  (applied via Redfish, verified with a fresh login, and automatically
+  reverted if verification fails -- you can't accidentally lock yourself
+  out of iLO from here).
 - **Settings** -- Away Mode (see below), Quiet Hours, and webhook alerts,
   all editable from the browser; nothing requires hand-editing
   `config.json` after initial setup.
